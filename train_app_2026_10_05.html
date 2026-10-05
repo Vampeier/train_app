@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="de" class="dark h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>NEB - Anschlusszüge</title>
+
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0f172a">
+
+    <!-- PWA Manifest Verknüpfung -->
+    <link rel="manifest" href="manifest.json">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 h-full flex flex-col overflow-hidden select-none">
+
+    <!-- Horizontale Top-Bar -->
+    <header class="bg-slate-800/95 backdrop-blur-md border-b border-slate-700/80 px-2 py-1.5 shrink-0 shadow-md">
+        <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar whitespace-nowrap">
+            
+            <!-- Vollbild & Plus -->
+            <div class="flex items-center gap-2 bg-slate-900/80 border border-slate-700/70 px-2 py-1 rounded-lg shrink-0 text-xs">
+                <button type="button" onclick="toggleFullscreen()" class="text-slate-400 hover:text-white transition" title="Vollbild">
+                    <span id="fullscreen-icon">⛶</span>
+                </button>
+                <div class="h-3.5 w-[1px] bg-slate-700"></div>
+                <button type="button" onclick="openAddModal()" class="text-green-400 hover:text-green-300 font-bold transition flex items-center gap-0.5" title="Züge / Schichten hinzufügen">
+                    <span>➕</span>
+                </button>
+            </div>
+
+            <!-- Datumsauswahl -->
+            <div class="flex items-center shrink-0">
+                <input type="date" id="datePicker" onchange="onDateChange()" 
+                       class="bg-slate-900 border border-slate-700 text-white text-xs rounded-lg px-1.5 py-1 focus:outline-none focus:border-blue-500 font-mono">
+            </div>
+
+            <!-- Zug-Auswahl als Pulldown-Menü -->
+            <div id="trainSelectContainer" class="flex items-center gap-1 shrink-0 hidden">
+                <select id="trainSelect" onchange="selectTrain(this.value)" 
+                        class="bg-slate-900 border border-slate-700 text-blue-400 font-mono font-bold text-xs rounded-lg px-2 py-1 focus:outline-none focus:border-blue-500 max-w-[200px] truncate">
+                    <!-- Dynamisch befüllt -->
+                </select>
+                <button type="button" onclick="deleteActiveTrain()" title="Aktuellen Zug löschen" 
+                        class="bg-slate-900 border border-slate-700 text-slate-400 hover:text-red-400 px-2 py-1 rounded-lg text-xs transition">
+                    ✕
+                </button>
+            </div>
+
+            <!-- Externer Link -->
+            <a id="externalLink" href="#" target="_blank" class="text-xs bg-slate-900 border border-slate-700 text-blue-400 hover:text-blue-300 px-2 py-1 rounded-lg shrink-0 hidden" title="Auf bahn.expert öffnen">
+                ↗
+            </a>
+
+        </div>
+    </header>
+
+    <!-- iFrame -->
+    <main class="flex-1 w-full h-full relative bg-slate-950">
+        <iframe 
+            id="bahnIframe" 
+            src="" 
+            class="w-full h-full border-0 hidden" 
+            loading="lazy"
+            title="bahn.expert Details">
+        </iframe>
+    </main>
+
+    <!-- Modal für Übersicht & Getrennte Eingabe -->
+    <div id="addModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-md w-full p-4 shadow-2xl space-y-3">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                <h3 class="text-sm font-bold text-white flex items-center gap-1.5">
+                    <span>🚆</span> Züge / Schichten verwalten
+                </h3>
+                <button type="button" onclick="closeAddModal()" class="text-slate-400 hover:text-white text-xs px-1">✕</button>
+            </div>
+
+            <!-- Vorhandene Züge Tabelle -->
+            <div id="modalTrainTableContainer" class="max-h-36 overflow-y-auto no-scrollbar rounded-lg border border-slate-800 bg-slate-950/50 p-2 text-xs">
+                <table class="w-full text-left font-mono">
+                    <thead>
+                        <tr class="text-slate-500 border-b border-slate-800 text-[11px]">
+                            <th class="pb-1">Zug</th>
+                            <th class="pb-1 text-center">Strecke</th>
+                            <th class="pb-1 text-right">Zeit</th>
+                            <th class="pb-1 w-6"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="modalTrainTableBody" class="divide-y divide-slate-800/50">
+                        <!-- Dynamisch befüllt -->
+                    </tbody>
+                </table>
+                <div id="modalEmptyHint" class="text-center text-slate-500 text-[11px] py-2 hidden">
+                    Noch keine Züge eingetragen.
+                </div>
+            </div>
+            
+            <!-- Getrennte Eingabefelder -->
+            <div class="space-y-2">
+                <div>
+                    <label class="text-[11px] text-slate-400 block font-semibold mb-0.5">
+                        Schichtnummer(n):
+                    </label>
+                    <input type="text" id="modalShiftInput" placeholder="z.B. 52002, 52005"
+                           class="w-full bg-slate-950 border border-slate-700 text-white placeholder-slate-600 text-xs rounded-lg p-2 focus:outline-none focus:border-blue-500 font-mono">
+                </div>
+
+                <div>
+                    <label class="text-[11px] text-slate-400 block font-semibold mb-0.5">
+                        Einzelne Zugnummer(n):
+                    </label>
+                    <input type="text" id="modalTrainInput" placeholder="z.B. 55693, 55698"
+                           class="w-full bg-slate-950 border border-slate-700 text-white placeholder-slate-600 text-xs rounded-lg p-2 focus:outline-none focus:border-blue-500 font-mono">
+                </div>
+            </div>
+
+            <div class="flex justify-between items-center pt-1">
+                <span id="loadedJsonStatus" class="text-[10px] text-slate-500 font-mono truncate max-w-[180px]"></span>
+                <div class="flex gap-2">
+                    <button type="button" onclick="closeAddModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold px-3 py-1.5 rounded-lg transition">
+                        Schließen
+                    </button>
+                    <button type="button" id="submitBtn" onclick="submitMultipleInputs()" class="bg-green-600 hover:bg-green-500 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg transition">
+                        Hinzufügen
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    const shiftData = {
+      "schichten": [
+        {
+          "schichtnummer": "52002",
+          "verkehrstage": ["Mo", "Di", "Mi", "Do", "Fr"],
+          "beginn": "12:51",
+          "ende": "21:12",
+          "hinweis": null,
+          "leistungen": [
+            { "zugnummer": "55693", "strecke": "W - F", "von": "13:02", "bis": "13:50" },
+            { "zugnummer": "55698", "strecke": "F - E", "von": "14:09", "bis": "15:44" },
+            { "zugnummer": "55701", "strecke": "E - F", "von": "16:21", "bis": "17:50" },
+            { "zugnummer": "55706", "strecke": "F - E", "von": "18:09", "bis": "19:44" },
+            { "zugnummer": "55709", "strecke": "E - W", "von": "20:21", "bis": "20:58" }
+          ]
+        },
+        {
+          "schichtnummer": "52003",
+          "verkehrstage": ["Mo", "Di", "Mi", "Do", "Fr"],
+          "beginn": "04:17",
+          "ende": "14:12",
+          "hinweis": null,
+          "leistungen": [
+            { "zugnummer": "55676", "strecke": "W - E", "von": "04:28", "bis": "05:04" },
+            { "zugnummer": "55679", "strecke": "E - F", "von": "05:21", "bis": "06:51" },
+            { "zugnummer": "55684", "strecke": "F - E", "von": "07:09", "bis": "08:44" },
+            { "zugnummer": "55687", "strecke": "E - F", "von": "09:21", "bis": "10:50" },
+            { "zugnummer": "55692", "strecke": "F - E", "von": "11:09", "bis": "12:44" },
+            { "zugnummer": "55695", "strecke": "E - W", "von": "13:21", "bis": "13:58" }
+          ]
+        },
+        {
+          "schichtnummer": "52004",
+          "verkehrstage": ["Mo", "Di", "Mi", "Do", "Fr"],
+          "beginn": "12:53",
+          "ende": "23:12",
+          "hinweis": null,
+          "leistungen": [
+            { "zugnummer": "55694", "strecke": "W - E", "von": "13:04", "bis": "13:44" },
+            { "zugnummer": "55697", "strecke": "E - F", "von": "14:21", "bis": "15:50" },
+            { "zugnummer": "55702", "strecke": "F - E", "von": "16:09", "bis": "17:44" },
+            { "zugnummer": "55705", "strecke": "E - F", "von": "18:21", "bis": "19:50" },
+            { "zugnummer": "55710", "strecke": "F - E", "von": "20:09", "bis": "21:44" },
+            { "zugnummer": "55713", "strecke": "E - W", "von": "22:21", "bis": "22:58" }
+          ]
+        },
+        {
+          "schichtnummer": "52005",
+          "verkehrstage": ["Mo", "Di", "Mi", "Do", "Fr"],
+          "beginn": "04:51",
+          "ende": "13:17",
+          "hinweis": "Post W / Post F",
+          "leistungen": [
+            { "zugnummer": "55677", "strecke": "W - F", "von": "05:02", "bis": "05:51" },
+            { "zugnummer": "55682", "strecke": "F - E", "von": "06:09", "bis": "07:44" },
+            { "zugnummer": "55685", "strecke": "E - F", "von": "08:21", "bis": "09:50" },
+            { "zugnummer": "55690", "strecke": "F - E", "von": "10:09", "bis": "11:44" },
+            { "zugnummer": "55693", "strecke": "E - W", "von": "12:21", "bis": "12:58" }
+          ]
+        },
+        {
+          "schichtnummer": "52006",
+          "verkehrstage": ["Mo", "Di", "Mi", "Do", "Fr"],
+          "beginn": "13:51",
+          "ende": "00:14",
+          "hinweis": null,
+          "leistungen": [
+            { "zugnummer": "55695", "strecke": "W - F", "von": "14:02", "bis": "14:50" },
+            { "zugnummer": "55700", "strecke": "F - E", "von": "15:09", "bis": "16:44" },
+            { "zugnummer": "55703", "strecke": "E - F", "von": "17:21", "bis": "18:50" },
+            { "zugnummer": "55708", "strecke": "F - E", "von": "19:09", "bis": "20:44" },
+            { "zugnummer": "55711", "strecke": "E - F", "von": "21:21", "bis": "22:50" },
+            { "zugnummer": "55714", "strecke": "F - W", "von": "23:09", "bis": "00:00" }
+          ]
+        },
+        {
+          "schichtnummer": "52008",
+          "verkehrstage": ["Mo", "Di", "Mi", "Do"],
+          "beginn": "13:50",
+          "ende": "00:12",
+          "hinweis": "KT von 52001",
+          "leistungen": [
+            { "zugnummer": "55696", "strecke": "W - E", "von": "14:04", "bis": "14:44" },
+            { "zugnummer": "55699", "strecke": "E - F", "von": "15:21", "bis": "16:50" },
+            { "zugnummer": "55704", "strecke": "F - E", "von": "17:09", "bis": "18:44" },
+            { "zugnummer": "55707", "strecke": "E - F", "von": "19:21", "bis": "20:50" },
+            { "zugnummer": "55712", "strecke": "F - E", "von": "21:09", "bis": "22:44" },
+            { "zugnummer": "55715", "strecke": "E - W", "von": "23:21", "bis": "23:58" }
+          ]
+        },
+        {
+          "schichtnummer": "52011",
+          "verkehrstage": ["Mo", "Mi", "Fr"],
+          "beginn": "03:47",
+          "ende": "14:17",
+          "hinweis": "KT mitnehmen",
+          "leistungen": [
+            { "zugnummer": "55675", "strecke": "W - F", "von": "03:48", "bis": "04:36" },
+            { "zugnummer": "55680", "strecke": "F - E", "von": "05:06", "bis": "06:44" },
+            { "zugnummer": "55683", "strecke": "E - F", "von": "07:21", "bis": "08:50" },
+            { "zugnummer": "55688", "strecke": "F - E", "von": "09:09", "bis": "10:44" },
+            { "zugnummer": "55691", "strecke": "E - F", "von": "11:21", "bis": "12:50" },
+            { "zugnummer": "55696", "strecke": "F - W", "von": "13:09", "bis": "14:00" }
+          ]
+        },
+        {
+          "schichtnummer": "52017",
+          "verkehrstage": ["Mo", "Mi", "Fr"],
+          "beginn": "04:53",
+          "ende": "13:14",
+          "hinweis": null,
+          "leistungen": [
+            { "zugnummer": "55678", "strecke": "W - E", "von": "05:04", "bis": "05:44" },
+            { "zugnummer": "55681", "strecke": "E - F", "von": "06:21", "bis": "07:50" },
+            { "zugnummer": "55686", "strecke": "F - E", "von": "08:09", "bis": "09:44" },
+            { "zugnummer": "55689", "strecke": "E - F", "von": "10:21", "bis": "11:50" },
+            { "zugnummer": "55694", "strecke": "E - W", "von": "12:09", "bis": "13:00" }
+          ]
+        },
+        {
+          "schichtnummer": "52021",
+          "verkehrstage": ["Di", "Do"],
+          "beginn": "03:37",
+          "ende": "14:17",
+          "hinweis": "KT mitnehmen",
+          "leistungen": [
+            { "zugnummer": "55675", "strecke": "W - F", "von": "03:48", "bis": "04:36" },
+            { "zugnummer": "55680", "strecke": "F - E", "von": "05:06", "bis": "06:44" },
+            { "zugnummer": "55683", "strecke": "E - F", "von": "07:21", "bis": "08:50" },
+            { "zugnummer": "55688", "strecke": "F - E", "von": "09:09", "bis": "10:44" },
+            { "zugnummer": "55691", "strecke": "E - F", "von": "11:21", "bis": "12:50" },
+            { "zugnummer": "55696", "strecke": "F - W", "von": "13:09", "bis": "14:00" }
+          ]
+        },
+        {
+          "schichtnummer": "52027",
+          "verkehrstage": ["Di", "Do"],
+          "beginn": "04:53",
+          "ende": "13:14",
+          "hinweis": null,
+          "leistungen": [
+            { "zugnummer": "55678", "strecke": "W - E", "von": "05:04", "bis": "05:44" },
+            { "zugnummer": "55681", "strecke": "E - F", "von": "06:21", "bis": "07:50" },
+            { "zugnummer": "55686", "strecke": "F - E", "von": "08:09", "bis": "09:44" },
+            { "zugnummer": "55689", "strecke": "E - F", "von": "10:21", "bis": "11:50" },
+            { "zugnummer": "55694", "strecke": "E - W", "von": "12:09", "bis": "13:00" }
+          ]
+        },
+        {
+          "schichtnummer": "52050",
+          "verkehrstage": ["Fr"],
+          "beginn": "19:48",
+          "ende": "02:12",
+          "hinweis": "KT von 52058",
+          "leistungen": [
+            { "zugnummer": "55707", "strecke": "W - F", "von": "20:02", "bis": "20:50" },
+            { "zugnummer": "55712", "strecke": "F - E", "von": "21:09", "bis": "22:44" },
+            { "zugnummer": "55715", "strecke": "E - W", "von": "23:21", "bis": "23:58" },
+            { "zugnummer": "55714", "strecke": "W - E", "von": "00:04", "bis": "00:44" },
+            { "zugnummer": "55717", "strecke": "E - W", "von": "01:21", "bis": "01:58" }
+          ]
+        },
+        {
+          "schichtnummer": "52058",
+          "verkehrstage": ["Fr"],
+          "beginn": "13:50",
+          "ende": "20:15",
+          "hinweis": "KT mitnehmen",
+          "leistungen": [
+            { "zugnummer": "55696", "strecke": "W - E", "von": "14:04", "bis": "14:44" },
+            { "zugnummer": "55699", "strecke": "E - F", "von": "15:21", "bis": "16:50" },
+            { "zugnummer": "55704", "strecke": "F - E", "von": "17:09", "bis": "18:44" },
+            { "zugnummer": "55707", "strecke": "E - W", "von": "19:21", "bis": "19:58" }
+          ]
+        },
+        {
+          "schichtnummer": "52061",
+          "verkehrstage": ["Sa"],
+          "beginn": "05:53",
+          "ende": "16:12",
+          "hinweis": null,
+          "leistungen": [
+            { "zugnummer": "55680", "strecke": "W - E", "von": "06:04", "bis": "06:44" },
+            { "zugnummer": "55683", "strecke": "E - F", "von": "07:21", "bis": "08:50" },
+            { "zugnummer": "55688", "strecke": "F - E", "von": "09:09", "bis": "10:44" },
+            { "zugnummer": "55691", "strecke": "E - F", "von": "11:21", "bis": "12:50" },
+            { "zugnummer": "55696", "strecke": "F - E", "von": "13:09", "bis": "14:44" },
+            { "zugnummer": "55699", "strecke": "E - W", "von": "15:21", "bis": "15:58" }
+          ]
+        },
+        {
+          "schichtnummer": "52062",
+          "verkehrstage": ["Sa"],
+          "beginn": "12:51",
+          "ende": "21:12",
+          "hinweis": null,
+          "leistungen": [
+            { "zugnummer": "55693", "strecke": "W - F", "von": "13:02", "bis": "13:50" },
+            { "zugnummer": "55698", "strecke": "F - E", "von": "14:09", "bis": "15:44" },
+            { "zugnummer": "55701", "strecke": "E - F", "von": "16:21", "bis": "17:50" },
+            { "zugnummer": "55706", "strecke": "F - E", "von": "18:09", "bis": "19:44" },
+            { "zugnummer": "55709", "strecke": "E - W", "von": "20:21", "bis": "20:58" }
+          ]
+        },
+        {
+          "schichtnummer": "52063",
+          "verkehrstage": ["Sa"],
+          "beginn": "04:17",
+          "ende": "14:12",
+          "hinweis": "KT mitnehmen",
+          "leistungen": [
+            { "zugnummer": "55676", "strecke": "W - E", "von": "04:28", "bis": "05:04" },
+            { "zugnummer": "55679", "strecke": "E - F", "von": "05:21", "bis": "06:51" },
+            { "zugnummer": "55684", "strecke": "F - E", "von": "07:09", "bis": "08:44" },
+            { "zugnummer": "55687", "strecke": "E - F", "von": "09:21", "bis": "10:50" },
+            { "zugnummer": "55692", "strecke": "F - E", "von": "11:09", "bis": "12:44" },
+            { "zugnummer": "55695", "strecke": "E - W", "von": "13:21", "bis": "13:58" }
+          ]
+        },
+        {
+          "schichtnummer": "52064",
+          "verkehrstage": ["Sa"],
+          "beginn": "12:51",
+          "ende": "21:12",
+          "hinweis": null,
+          "leistungen": [
+            { "zugnummer": "55694", "strecke": "W - E", "von": "13:04", "bis": "13:44" },
+            { "zugnummer": "55697", "strecke": "E - F", "von": "14:21", "bis": "15:50" },
+            { "zugnummer": "55702", "strecke": "F - E", "von": "16:09", "bis": "17:44" },
+            { "zugnummer": "55705", "strecke": "E - F", "von": "18:21", "bis": "19:50" },
+            { "zugnummer": "55710", "strecke": "F - E", "von": "20:09", "bis": "21:44" },
+            { "zugnummer": "55713", "strecke": "E - W", "von": "22:21", "bis": "22:58" }
+          ]
+        },
+        {
+          "schichtnummer": "52065",
+          "verkehrstage": ["Sa"],
+          "beginn": "04:51",
+          "ende": "13:12",
+          "hinweis": null,
+          "leistungen": [
+            { "zugnummer": "55677", "strecke": "W - F", "von": "05:02", "bis": "05:51" },
+            { "zugnummer": "55682", "strecke": "F - E", "von": "06:09", "bis": "07:44" },
+            { "zugnummer": "55685", "strecke": "E - F", "von": "08:21", "bis": "09:50" },
+            { "zugnummer": "55690", "strecke": "F - E", "von": "10:09", "bis": "11:44" },
+            { "zugnummer": "55693", "strecke": "E - W", "von": "12:21", "bis": "12:58" }
+          ]
+        },
+        {
+          "schichtnummer": "52066",
+          "verkehrstage": ["Sa"],
+          "beginn": "13:51",
+          "ende": "00:14",
+          "hinweis": null,
+          "leistungen": [
+            { "zugnummer": "55695", "strecke": "W - F", "von": "14:02", "bis": "14:50" },
+            { "zugnummer": "55700", "strecke": "F - E", "von": "15:09", "bis": "16:44" },
+            { "zugnummer": "55703", "strecke": "E - F", "von": "17:21", "bis": "18:50" },
+            { "zugnummer": "55708", "strecke": "F - E", "von": "19:09", "bis": "20:44" },
+            { "zugnummer": "55711", "strecke": "E - F", "von": "21:21", "bis": "22:50" },
+            { "zugnummer": "55714", "strecke": "F - W", "von": "23:09", "bis": "00:00" }
+          ]
+        },
+        {
+          "schichtnummer": "52067",
+          "verkehrstage": ["Sa"],
+          "beginn": "04:53",
+          "ende": "13:14",
+          "hinweis": null,
+          "leistungen": [
+            { "zugnummer": "55678", "strecke": "W - E", "von": "05:04", "bis": "05:44" },
+            { "zugnummer": "55681", "strecke": "E - F", "von": "06:21", "bis": "07:50" },
+            { "zugnummer": "55686", "strecke": "F - E", "von": "08:09", "bis": "09:44" },
+            { "zugnummer": "55689", "strecke": "E - F", "von": "10:21", "bis": "11:50" },
+            { "zugnummer": "55694", "strecke": "E - W", "von": "12:09", "bis": "13:00" }
+          ]
+        },
+        {
+          "schichtnummer": "52068",
+          "verkehrstage": ["Sa"],
+          "beginn": "15:51",
+          "ende": "02:12",
+          "hinweis": "KT mitnehmen",
+          "leistungen": [
+            { "zugnummer": "55699", "strecke": "E - F", "von": "15:21", "bis": "16:50" },
+            { "zugnummer": "55704", "strecke": "F - E", "von": "17:09", "bis": "18:44" },
+            { "zugnummer": "55707", "strecke": "E - F", "von": "19:21", "bis": "20:50" },
+            { "zugnummer": "55712", "strecke": "F - E", "von": "21:09", "bis": "22:44" },
+            { "zugnummer": "55715", "strecke": "E - W", "von": "23:21", "bis": "23:58" },
+            { "zugnummer": "55714", "strecke": "W - E", "von": "00:04", "bis": "00:44" },
+            { "zugnummer": "55717", "strecke": "E - W", "von": "01:21", "bis": "01:58" }
+          ]
+        },
+        {
+          "schichtnummer": "52071",
+          "verkehrstage": ["So"],
+          "beginn": "05:53",
+          "ende": "16:12",
+          "hinweis": null,
+          "leistungen": [
+            { "zugnummer": "55680", "strecke": "W - E", "von": "06:04", "bis": "06:44" },
+            { "zugnummer": "55683", "strecke": "E - F", "von": "07:21", "bis": "08:50" },
+            { "zugnummer": "55688", "strecke": "F - E", "von": "09:09", "bis": "10:44" },
+            { "zugnummer": "55691", "strecke": "E - F", "von": "11:21", "bis": "12:50" },
+            { "zugnummer": "55696", "strecke": "F - W", "von": "13:09", "bis": "14:00" }
+          ]
+        },
+        {
+          "schichtnummer": "52072",
+          "verkehrstage": ["So"],
+          "beginn": "12:51",
+          "ende": "21:12",
+          "hinweis": null,
+          "leistungen": [
+            { "zugnummer": "55693", "strecke": "W - F", "von": "13:02", "bis": "13:50" },
+            { "zugnummer": "55698", "strecke": "F - E", "von": "14:09", "bis": "15:44" },
+            { "zugnummer": "55701", "strecke": "E - F", "von": "16:21", "bis": "17:50" },
+            { "zugnummer": "55706", "strecke": "F - E", "von": "18:09", "bis": "19:44" },
+            { "zugnummer": "55709", "strecke": "E - W", "von": "20:21", "bis": "20:58" }
+          ]
+        },
+        {
+          "schichtnummer": "52073",
+          "verkehrstage": ["So"],
+          "beginn": "05:51",
+          "ende": "14:12",
+          "hinweis": null,
+          "leistungen": [
+            { "zugnummer": "55679", "strecke": "E - F", "von": "05:21", "bis": "06:51" },
+            { "zugnummer": "55684", "strecke": "F - E", "von": "07:09", "bis": "08:44" },
+            { "zugnummer": "55687", "strecke": "E - F", "von": "09:21", "bis": "10:50" },
+            { "zugnummer": "55692", "strecke": "F - E", "von": "11:09", "bis": "12:44" },
+            { "zugnummer": "55695", "strecke": "E - W", "von": "13:21", "bis": "13:58" }
+          ]
+        },
+        {
+          "schichtnummer": "52074",
+          "verkehrstage": ["So"],
+          "beginn": "12:53",
+          "ende": "23:12",
+          "hinweis": null,
+          "leistungen": [
+            { "zugnummer": "55694", "strecke": "W - E", "von": "13:04", "bis": "13:44" },
+            { "zugnummer": "55697", "strecke": "E - F", "von": "14:21", "bis": "15:50" },
+            { "zugnummer": "55702", "strecke": "F - E", "von": "16:09", "bis": "17:44" },
+            { "zugnummer": "55705", "strecke": "E - F", "von": "18:21", "bis": "19:50" },
+            { "zugnummer": "55712", "strecke": "F - E", "von": "20:09", "bis": "21:44" },
+            { "zugnummer": "55713", "strecke": "E - W", "von": "22:21", "bis": "22:58" }
+          ]
+        },
+        {
+          "schichtnummer": "52075",
+          "verkehrstage": ["So"],
+          "beginn": "12:53",
+          "ende": "23:12",
+          "hinweis": null,
+          "leistungen": [
+            { "zugnummer": "55682", "strecke": "W - E", "von": "07:04", "bis": "07:44" },
+            { "zugnummer": "55685", "strecke": "E - F", "von": "08:21", "bis": "09:50" },
+            { "zugnummer": "55690", "strecke": "F - E", "von": "10:09", "bis": "11:44" },
+            { "zugnummer": "55693", "strecke": "E - W", "von": "12:21", "bis": "12:58" }
+          ]
+        },
+        {
+          "schichtnummer": "52076",
+          "verkehrstage": ["So"],
+          "beginn": "13:51",
+          "ende": "00:14",
+          "hinweis": null,
+          "leistungen": [
+            { "zugnummer": "55695", "strecke": "W - F", "von": "14:02", "bis": "14:50" },
+            { "zugnummer": "55700", "strecke": "F - E", "von": "15:09", "bis": "16:44" },
+            { "zugnummer": "55703", "strecke": "E - F", "von": "17:21", "bis": "18:50" },
+            { "zugnummer": "55708", "strecke": "F - E", "von": "19:09", "bis": "20:44" },
+            { "zugnummer": "55711", "strecke": "E - F", "von": "21:21", "bis": "22:50" },
+            { "zugnummer": "55714", "strecke": "F - W", "von": "23:09", "bis": "00:00" }
+          ]
+        },
+        {
+          "schichtnummer": "52077",
+          "verkehrstage": ["So"],
+          "beginn": "04:53",
+          "ende": "13:14",
+          "hinweis": "KT mitnehmen",
+          "leistungen": [
+            { "zugnummer": "55678", "strecke": "W - E", "von": "05:04", "bis": "05:44" },
+            { "zugnummer": "55681", "strecke": "E - F", "von": "06:21", "bis": "07:50" },
+            { "zugnummer": "55686", "strecke": "F - E", "von": "08:09", "bis": "09:44" },
+            { "zugnummer": "55689", "strecke": "E - F", "von": "10:21", "bis": "11:50" },
+            { "zugnummer": "55694", "strecke": "E - W", "von": "12:09", "bis": "13:00" }
+          ]
+        },
+        {
+          "schichtnummer": "52078",
+          "verkehrstage": ["So"],
+          "beginn": "13:53",
+          "ende": "00:12",
+          "hinweis": "KT mitnehmen",
+          "leistungen": [
+            { "zugnummer": "55696", "strecke": "W - E", "von": "14:04", "bis": "14:44" },
+            { "zugnummer": "55699", "strecke": "E - F", "von": "15:21", "bis": "16:50" },
+            { "zugnummer": "55704", "strecke": "F - E", "von": "17:09", "bis": "18:44" },
+            { "zugnummer": "55707", "strecke": "E - F", "von": "19:21", "bis": "20:50" },
+            { "zugnummer": "55712", "strecke": "F - E", "von": "21:09", "bis": "22:44" },
+            { "zugnummer": "55715", "strecke": "E - W", "von": "23:21", "bis": "23:58" }
+          ]
+        }
+      ],
+      "zugzeiten": {
+        "55675": { "1111100": { "W_ab": "03:48", "F_an": "04:36" } },
+        "55676": { "1111100": { "W_ab": "04:28", "E_an": "05:04" }, "0000010": { "W_ab": "04:28", "E_an": "05:04" } },
+        "55677": { "1111100": { "W_ab": "05:02", "F_an": "05:51" }, "0000010": { "W_ab": "05:02", "F_an": "05:51" } },
+        "55678": { "1111111": { "W_ab": "05:04", "E_an": "05:44" } },
+        "55679": { "1111100": { "E_ab": "05:21", "F_an": "06:51" }, "0000010": { "E_ab": "05:21", "F_an": "06:51" }, "0000001": { "E_ab": "05:21", "F_an": "06:51" } },
+        "55680": { "1111100": { "F_ab": "05:06", "E_an": "06:44" }, "0000011": { "W_ab": "06:04", "E_an": "06:44" } },
+        "55681": { "1111111": { "E_ab": "06:21", "F_an": "07:50" } },
+        "55682": { "1111100": { "F_ab": "06:09", "E_an": "07:44" }, "0000010": { "F_ab": "06:09", "E_an": "07:44" }, "0000001": { "W_ab": "07:04", "E_an": "07:44" } },
+        "55683": { "1111111": { "E_ab": "07:21", "F_an": "08:50" } },
+        "55684": { "1111111": { "F_ab": "07:09", "E_an": "08:44" } },
+        "55685": { "1111111": { "E_ab": "08:21", "F_an": "09:50" } },
+        "55686": { "1111111": { "F_ab": "08:09", "E_an": "09:44" } },
+        "55687": { "1111111": { "E_ab": "09:21", "F_an": "10:50" } },
+        "55688": { "1111111": { "F_ab": "09:09", "E_an": "10:44" } },
+        "55689": { "1111111": { "E_ab": "10:21", "F_an": "11:50" } },
+        "55690": { "1111111": { "F_ab": "10:09", "E_an": "11:44" } },
+        "55691": { "1111111": { "E_ab": "11:21", "F_an": "12:50" } },
+        "55692": { "1111111": { "F_ab": "11:09", "E_an": "12:44" } },
+        "55693": { "1111100": { "E_ab": "12:21", "W_an": "12:58", "W_ab": "13:02", "F_an": "13:50" }, "0000010": { "E_ab": "12:21", "W_an": "12:58", "W_ab": "13:02", "F_an": "13:50" }, "0000001": { "E_ab": "12:21", "W_an": "12:58", "W_ab": "13:02", "F_an": "13:50" } },
+        "55694": { "1111100": { "W_ab": "13:04", "E_an": "13:44", "E_ab": "12:09", "W_an": "13:00" }, "0000010": { "W_ab": "13:04", "E_an": "13:44", "E_ab": "12:09", "W_an": "13:00" }, "0000001": { "W_ab": "13:04", "E_an": "13:44", "E_ab": "12:09", "W_an": "13:00" } },
+        "55695": { "1111111": { "E_ab": "13:21", "W_an": "13:58", "W_ab": "14:02", "F_an": "14:50" } },
+        "55696": { "1111000": { "W_ab": "14:04", "E_an": "14:44", "F_ab": "13:09", "W_an": "14:00" }, "0000100": { "W_ab": "14:04", "E_an": "14:44", "F_ab": "13:09", "W_an": "14:00" }, "0000010": { "F_ab": "13:09", "E_an": "14:44" }, "0000001": { "W_ab": "14:04", "E_an": "14:44", "F_ab": "13:09", "W_an": "14:00" } },
+        "55697": { "1111111": { "E_ab": "14:21", "F_an": "15:50" } },
+        "55698": { "1111111": { "F_ab": "14:09", "E_an": "15:44" } },
+        "55699": { "1111100": { "E_ab": "15:21", "F_an": "16:50" }, "0000010": { "E_ab": "15:21", "W_an": "15:58", "W_ab": "16:05", "F_an": "16:50" }, "0000001": { "E_ab": "15:21", "F_an": "16:50" } },
+        "55700": { "1111111": { "F_ab": "15:09", "E_an": "16:44" } },
+        "55701": { "1111111": { "E_ab": "16:21", "F_an": "17:50" } },
+        "55702": { "1111111": { "F_ab": "16:09", "E_an": "17:44" } },
+        "55703": { "1111111": { "E_ab": "17:21", "F_an": "18:50" } },
+        "55704": { "1111111": { "F_ab": "17:09", "E_an": "18:44" } },
+        "55705": { "1111111": { "E_ab": "18:21", "F_an": "19:50" } },
+        "55706": { "1111111": { "F_ab": "18:09", "E_an": "19:44" } },
+        "55707": { "1111000": { "E_ab": "19:21", "F_an": "20:50" }, "0000100": { "W_ab": "20:02", "F_an": "20:50", "E_ab": "19:21", "W_an": "19:58" }, "0000011": { "E_ab": "19:21", "F_an": "20:50" } },
+        "55708": { "1111111": { "F_ab": "19:09", "E_an": "20:44" } },
+        "55709": { "1111111": { "E_ab": "20:21", "W_an": "20:58" } },
+        "55710": { "1111110": { "F_ab": "20:09", "E_an": "21:44" } },
+        "55711": { "1111111": { "E_ab": "21:21", "F_an": "22:50" } },
+        "55712": { "1111111": { "F_ab": "21:09", "E_an": "22:44" } },
+        "55713": { "1111111": { "E_ab": "22:21", "W_an": "22:58" } },
+        "55714": { "1111100": { "F_ab": "23:09", "W_an": "00:00" }, "0000110": { "F_ab": "23:09", "W_an": "00:00", "W_ab": "00:04", "E_an": "00:44" }, "0000001": { "F_ab": "23:09", "W_an": "00:00" } },
+        "55715": { "1111111": { "E_ab": "23:21", "W_an": "23:58" } },
+        "55717": { "0000110": { "E_ab": "01:21", "W_an": "01:58" } }
+      }
+    };
+
+    let activeDate = new Date().toISOString().split('T')[0];
+    document.getElementById('datePicker').value = activeDate;
+
+    function checkDataLoaded() {
+        const statusEl = document.getElementById('loadedJsonStatus');
+        if (typeof shiftData !== 'undefined') {
+            if (statusEl) statusEl.innerText = 'DB: Integriert (Aktiv)';
+        } else {
+            if (statusEl) statusEl.innerText = 'Fehler: DB fehlt!';
+        }
+    }
+
+    function getStoredData() {
+        return JSON.parse(localStorage.getItem('neb_train_data_v5') || '{}');
+    }
+
+    function saveStoredData(data) {
+        localStorage.setItem('neb_train_data_v5', JSON.stringify(data));
+    }
+
+    function getSortedTrainsForActiveDate() {
+        const data = getStoredData();
+        let trains = data[activeDate] || [];
+
+        trains.sort((a, b) => {
+            if (!a.depTime) return 1;
+            if (!b.depTime) return -1;
+            return a.depTime.localeCompare(b.depTime);
+        });
+
+        return trains;
+    }
+
+    function onDateChange() {
+        activeDate = document.getElementById('datePicker').value;
+        renderTrains();
+    }
+
+    function openAddModal() {
+        document.getElementById('addModal').classList.remove('hidden');
+        checkDataLoaded();
+        renderModalTable();
+        document.getElementById('modalShiftInput').value = '';
+        document.getElementById('modalTrainInput').value = '';
+        setTimeout(() => document.getElementById('modalShiftInput').focus(), 100);
+    }
+
+    function closeAddModal() {
+        document.getElementById('addModal').classList.add('hidden');
+    }
+
+    function formatTrainName(num) {
+        return /^\d+$/.test(num) ? 'NEB ' + num : num;
+    }
+
+    function parseRoute(streckeStr) {
+        if (!streckeStr) return { originAbbr: '?', destAbbr: '?' };
+        const parts = streckeStr.split('-').map(s => s.trim());
+        return {
+            originAbbr: parts[0] || '?',
+            destAbbr: parts[1] || '?'
+        };
+    }
+
+    function getTrainDetailsFromLocal(trainNum) {
+        const cleanTrainNum = String(trainNum).trim();
+        let originAbbr = '?';
+        let destAbbr = '?';
+        let depTime = null;
+        let arrTime = null;
+
+        if (typeof shiftData !== 'undefined' && shiftData.schichten) {
+            for (const schicht of shiftData.schichten) {
+                const leistung = schicht.leistungen.find(l => String(l.zugnummer).trim() === cleanTrainNum);
+                if (leistung) {
+                    const route = parseRoute(leistung.strecke);
+                    originAbbr = route.originAbbr;
+                    destAbbr = route.destAbbr;
+                    depTime = leistung.von;
+                    arrTime = leistung.bis;
+                    break;
+                }
+            }
+        }
+
+        if (!depTime && typeof shiftData !== 'undefined' && shiftData.zugzeiten && shiftData.zugzeiten[cleanTrainNum]) {
+            const zData = shiftData.zugzeiten[cleanTrainNum];
+            const firstKey = Object.keys(zData)[0];
+            if (firstKey) {
+                const info = zData[firstKey];
+                depTime = info.W_ab || info.E_ab || info.F_ab || null;
+                arrTime = info.F_an || info.E_an || info.W_an || null;
+            }
+        }
+
+        return {
+            num: cleanTrainNum,
+            lineName: formatTrainName(cleanTrainNum),
+            originAbbr: originAbbr,
+            destAbbr: destAbbr,
+            depTime: depTime,
+            arrTime: arrTime
+        };
+    }
+
+    function renderModalTable() {
+        const trains = getSortedTrainsForActiveDate();
+        const tbody = document.getElementById('modalTrainTableBody');
+        const emptyHint = document.getElementById('modalEmptyHint');
+
+        tbody.innerHTML = '';
+
+        if (trains.length === 0) {
+            emptyHint.classList.remove('hidden');
+            return;
+        }
+
+        emptyHint.classList.add('hidden');
+
+        trains.forEach(t => {
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-slate-800/40 text-slate-200";
+
+            const dep = t.depTime || '--:--';
+            const arr = t.arrTime || '--:--';
+            const route = `${t.originAbbr || '?'} - ${t.destAbbr || '?'}`;
+
+            tr.innerHTML = `
+                <td class="py-1 font-bold text-slate-100">${t.num}</td>
+                <td class="py-1 text-center text-slate-400">${route}</td>
+                <td class="py-1 text-right text-blue-400">${dep} - ${arr}</td>
+                <td class="py-1 text-right">
+                    <button onclick="deleteTrain('${t.num}')" class="text-slate-500 hover:text-red-400 px-1">✕</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function submitMultipleInputs() {
+        const shiftText = document.getElementById('modalShiftInput').value.trim();
+        const trainText = document.getElementById('modalTrainInput').value.trim();
+
+        if (!shiftText && !trainText) return;
+
+        const data = getStoredData();
+        if (!data[activeDate]) data[activeDate] = [];
+
+        const trainsToAdd = [];
+
+        if (shiftText && typeof shiftData !== 'undefined') {
+            const shifts = shiftText.split(/[\s,;\n]+/).map(s => s.trim()).filter(Boolean);
+            shifts.forEach(shiftNum => {
+                const matchedShift = shiftData.schichten ? shiftData.schichten.find(s => String(s.schichtnummer).trim() === shiftNum) : null;
+                
+                if (matchedShift && matchedShift.leistungen) {
+                    matchedShift.leistungen.forEach(l => {
+                        const route = parseRoute(l.strecke);
+                        trainsToAdd.push({
+                            num: String(l.zugnummer).trim(),
+                            lineName: formatTrainName(l.zugnummer),
+                            originAbbr: route.originAbbr,
+                            destAbbr: route.destAbbr,
+                            depTime: l.von,
+                            arrTime: l.bis
+                        });
+                    });
+                }
+            });
+        }
+
+        if (trainText) {
+            const trains = trainText.split(/[\s,;\n]+/).map(t => t.trim()).filter(Boolean);
+            trains.forEach(trainNum => {
+                trainsToAdd.push(getTrainDetailsFromLocal(trainNum));
+            });
+        }
+
+        trainsToAdd.forEach(details => {
+            const existingIndex = data[activeDate].findIndex(t => t.num === details.num);
+            if (existingIndex !== -1) {
+                data[activeDate][existingIndex] = details;
+            } else {
+                data[activeDate].push(details);
+            }
+        });
+
+        saveStoredData(data);
+        document.getElementById('modalShiftInput').value = '';
+        document.getElementById('modalTrainInput').value = '';
+
+        renderTrains();
+        renderModalTable();
+    }
+
+    function deleteTrain(trainNum) {
+        const data = getStoredData();
+        if (data[activeDate]) {
+            data[activeDate] = data[activeDate].filter(t => String(t.num) !== String(trainNum));
+            if (data[activeDate].length === 0) delete data[activeDate];
+            saveStoredData(data);
+        }
+        renderTrains();
+        renderModalTable();
+    }
+
+    function deleteActiveTrain() {
+        const select = document.getElementById('trainSelect');
+        if (select && select.value) {
+            deleteTrain(select.value);
+        }
+    }
+
+    function selectTrain(trainNum) {
+        if (!trainNum) return;
+
+        const formatted = formatTrainName(trainNum);
+        const url = "https://bahn.expert/details/" + encodeURIComponent(formatted);
+
+        const iframe = document.getElementById('bahnIframe');
+        const externalLink = document.getElementById('externalLink');
+
+        iframe.src = url;
+        externalLink.href = url;
+
+        const select = document.getElementById('trainSelect');
+        if (select) select.value = String(trainNum);
+    }
+
+    function renderTrains() {
+        const trains = getSortedTrainsForActiveDate();
+
+        const trainContainer = document.getElementById('trainSelectContainer');
+        const trainSelect = document.getElementById('trainSelect');
+        const iframe = document.getElementById('bahnIframe');
+        const externalLink = document.getElementById('externalLink');
+
+        trainSelect.innerHTML = '';
+
+        if (trains.length === 0) {
+            iframe.classList.add('hidden');
+            iframe.src = '';
+            externalLink.classList.add('hidden');
+            trainContainer.classList.add('hidden');
+            return;
+        }
+
+        iframe.classList.remove('hidden');
+        externalLink.classList.remove('hidden');
+        trainContainer.classList.remove('hidden');
+        
+        trains.forEach((t) => {
+            const timeStr = t.depTime || '--:--';
+            const routeStr = `(${t.originAbbr || '?'}-${t.destAbbr || '?'})`;
+
+            const option = document.createElement('option');
+            option.value = t.num;
+            option.textContent = `${timeStr} | ${t.num} ${routeStr}`;
+            trainSelect.appendChild(option);
+        });
+
+        const now = new Date();
+        const currentTimeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const isToday = activeDate === now.toISOString().split('T')[0];
+        let targetTrain = trains[0].num;
+
+        if (isToday) {
+            const currentOrNext = trains.find(t => {
+                if (!t.arrTime) return false;
+                return t.arrTime >= currentTimeStr;
+            });
+            if (currentOrNext) targetTrain = currentOrNext.num;
+        }
+
+        selectTrain(targetTrain);
+    }
+
+    function toggleFullscreen() {
+        const doc = document.documentElement;
+        const icon = document.getElementById('fullscreen-icon');
+
+        if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+            if (doc.requestFullscreen) doc.requestFullscreen();
+            else if (doc.webkitRequestFullscreen) doc.webkitRequestFullscreen();
+            if (icon) icon.innerText = '🗗';
+        } else {
+            if (document.exitFullscreen) document.exitFullscreen();
+            else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+            if (icon) icon.innerText = '⛶';
+        }
+    }
+
+    renderTrains();
+</script>
+
+<!-- Echter Service Worker Registrierungs-Code -->
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js')
+                .then(reg => console.log('SW erfolgreich registriert:', reg.scope))
+                .catch(err => console.error('SW Fehler:', err));
+        });
+    }
+</script>
+
+</body>
+</html>
