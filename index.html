@@ -193,6 +193,20 @@
         }
     });
 
+    // Funktion zum Öffnen beliebig gewählter Editor-Dateien im In-App iFrame (mit Cache-Buster)
+    function openPageInIframe(pageUrl) {
+        const iframe = document.getElementById('bahnIframe');
+        const externalLink = document.getElementById('externalLink');
+        const trainContainer = document.getElementById('trainSelectContainer');
+
+        // Verhindert das Cachen durch den Browser, indem ein aktueller Zeitstempel angehängt wird
+        iframe.src = pageUrl + '?t=' + Date.now();
+        iframe.classList.remove('hidden');
+
+        if (trainContainer) trainContainer.classList.add('hidden');
+        if (externalLink) externalLink.classList.add('hidden');
+    }
+
     
     const shiftData = {
       "schichten": [
