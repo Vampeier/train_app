@@ -52,7 +52,7 @@
                     <button type="button" onclick="toggleFullscreen(); toggleMenu();" class="w-full text-left px-3 py-2 text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2 transition border-t border-slate-800">
                         <span id="fullscreen-icon">⛶</span> Vollbild umschalten
                     </button>
-                    <button type="button" onclick="openPageInIframe('https://vampeier.github.io/train_app/'); toggleMenu();" class="w-full text-left px-3 py-1.5 text-purple-400 hover:bg-slate-800 hover:text-purple-300 flex items-center gap-2 transition">
+                    <button type="button" onclick="loadDataForDate(activeDate); toggleMenu();" class="w-full text-left px-3 py-1.5 text-purple-400 hover:bg-slate-800 hover:text-purple-300 flex items-center gap-2 transition">
                         <span>🚉</span> Home
                     </button>
                     
@@ -731,8 +731,19 @@
         document.getElementById('addModal').classList.add('hidden');
     }
 
-    function formatTrainName(num) {
+    /*function formatTrainName(num) {
         return /^\d+$/.test(num) ? 'NEB ' + num : num;
+    }*/
+    function formatTrainName(num) {
+        const str = String(num).trim();
+        
+        if (/^\d{5}$/.test(str)) {
+            return 'NEB ' + str;
+        } else if (/^\d{4}$/.test(str)) {
+            return 'Bus ' + str;
+        }
+        
+        return num; // Falls weder 4- noch 5-stellig (oder keine reinen Zahlen)
     }
 
     function parseRoute(streckeStr) {
