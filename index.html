@@ -27,7 +27,7 @@
         <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar whitespace-nowrap">
             
             <!-- Vollbild & Plus -->
-            <div class="flex items-center gap-2 bg-slate-900/80 border border-slate-700/70 px-2 py-1 rounded-lg shrink-0 text-xs">
+            <!--<div class="flex items-center gap-2 bg-slate-900/80 border border-slate-700/70 px-2 py-1 rounded-lg shrink-0 text-xs">
                 <button type="button" onclick="toggleFullscreen()" class="text-slate-400 hover:text-white transition" title="Vollbild">
                     <span id="fullscreen-icon">⛶</span>
                 </button>
@@ -35,6 +35,43 @@
                 <button type="button" onclick="openAddModal()" class="text-green-400 hover:text-green-300 font-bold transition flex items-center gap-0.5" title="Züge / Schichten hinzufügen">
                     <span>➕</span>
                 </button>
+            </div>-->
+
+            <!-- Menü-Button -->
+            <div class="relative shrink-0">
+                <button type="button" id="menuBtn" onclick="toggleMenu(event)" class="bg-slate-900 border border-slate-700 text-slate-300 hover:text-white px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1" title="Menü">
+                    <span>☰</span>
+                </button>
+    
+                <!-- Dropdown-Menü mit Aufteilung der neuen Editoren -->
+                <div id="dropdownMenu" class="absolute left-0 top-full mt-2 w-56 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 hidden py-1 text-xs">
+                    <button type="button" onclick="openAddModal(); toggleMenu();" class="w-full text-left px-3 py-2 text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2 transition">
+                        <span>➕</span> Züge / Schichten verwalten
+                    </button>
+                    <button type="button" onclick="toggleFullscreen(); toggleMenu();" class="w-full text-left px-3 py-2 text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2 transition border-t border-slate-800">
+                        <span id="fullscreen-icon">⛶</span> Vollbild umschalten
+                    </button>
+                    
+                    <!-- Neue Editor-Links -->
+                    <div class="border-t border-slate-800 py-1">
+                        <div class="px-3 py-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Stammdaten-Editoren</div>
+                        <button type="button" onclick="openPageInIframe('editor_zuege.html'); toggleMenu();" class="w-full text-left px-3 py-1.5 text-blue-400 hover:bg-slate-800 hover:text-blue-300 flex items-center gap-2 transition">
+                            <span>🚆</span> Zugzeiten & Fahrplan Editor
+                        </button>
+                        <button type="button" onclick="openPageInIframe('editor_schichten.html'); toggleMenu();" class="w-full text-left px-3 py-1.5 text-emerald-400 hover:bg-slate-800 hover:text-emerald-300 flex items-center gap-2 transition">
+                            <span>📋</span> Schichten-Editor
+                        </button>
+                        <button type="button" onclick="openPageInIframe('editor_baustellen.html'); toggleMenu();" class="w-full text-left px-3 py-1.5 text-amber-400 hover:bg-slate-800 hover:text-amber-300 flex items-center gap-2 transition">
+                            <span>⚠️</span> Baustellen-Editor
+                        </button>
+                    </div>
+                    <div class="border-t border-slate-800 py-1">
+                        <div class="px-3 py-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Büro</div>
+                        <button type="button" onclick="openPageInIframe('abrechnung.html'); toggleMenu();" class="w-full text-left px-3 py-1.5 text-purple-400 hover:bg-slate-800 hover:text-purple-300 flex items-center gap-2 transition">
+                            <span>💶</span> Kassenabrechnung
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <!-- Datumsauswahl -->
@@ -138,6 +175,24 @@
     </div>
 
 <script>
+    function toggleMenu(event) {
+        if (event) event.stopPropagation();
+        const menu = document.getElementById('dropdownMenu');
+        menu.classList.toggle('hidden');
+    }
+
+    window.addEventListener('click', (e) => {
+        const menu = document.getElementById('dropdownMenu');
+        const menuBtn = document.getElementById('menuBtn');
+        
+        if (menu && !menu.classList.contains('hidden')) {
+            if (!menu.contains(e.target) && !menuBtn.contains(e.target)) {
+                menu.classList.add('hidden');
+            }
+        }
+    });
+
+    
     const shiftData = {
       "schichten": [
        /* {
