@@ -52,6 +52,9 @@
                     <button type="button" onclick="toggleFullscreen(); toggleMenu();" class="w-full text-left px-3 py-2 text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2 transition border-t border-slate-800">
                         <span id="fullscreen-icon">⛶</span> Vollbild umschalten
                     </button>
+                    <button type="button" onclick="openPageInIframe('https://vampeier.github.io/train_app/'); toggleMenu();" class="w-full text-left px-3 py-1.5 text-purple-400 hover:bg-slate-800 hover:text-purple-300 flex items-center gap-2 transition">
+                        <span>🚉</span> Home
+                    </button>
                     
                     <!-- Neue Editor-Links -->
                     <div class="border-t border-slate-800 py-1">
@@ -203,8 +206,8 @@
         iframe.src = pageUrl + '?t=' + Date.now();
         iframe.classList.remove('hidden');
 
-        if (trainContainer) trainContainer.classList.add('hidden');
-        if (externalLink) externalLink.classList.add('hidden');
+        //if (trainContainer) trainContainer.classList.add('hidden');
+        //if (externalLink) externalLink.classList.add('hidden');
     }
 
     
