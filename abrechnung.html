@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="de" class="dark h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>NEB - Kassenabrechnung</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-full flex flex-col p-2 select-none">
+
+    <!-- Header / Titel -->
+    <header class="flex justify-between items-center bg-slate-900 border border-slate-800 p-2 rounded-xl mb-2 shadow-md shrink-0">
+        <h1 class="text-xs font-bold text-white flex items-center gap-1.5">
+            <span class="text-amber-400 font-extrabold">»</span> NEB Kassenabrechnung
+        </h1>
+        <button type="button" onclick="resetForm()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] px-2 py-1 rounded-lg transition">
+            Zurücksetzen
+        </button>
+    </header>
+
+    <!-- Hauptbereich -->
+    <main class="flex-1 space-y-2 max-w-4xl mx-auto w-full pb-6">
+        
+        <!-- Steuerungs-Panel (Datum, FSV bar, Wechselgeld) -->
+        <div class="bg-slate-900 border border-slate-800 p-2 rounded-xl grid grid-cols-3 gap-1.5">
+            <div>
+                <label class="text-[10px] text-slate-400 block font-semibold mb-0.5 truncate">Datum:</label>
+                <input type="date" id="abrechnungsDatum" 
+                       class="w-full bg-slate-950 border border-slate-700 text-white text-[11px] rounded px-1.5 py-1.5 focus:outline-none focus:border-blue-500 font-mono">
+            </div>
+            <div>
+                <label class="text-[10px] text-slate-400 block font-semibold mb-0.5 truncate">FSV bar (€):</label>
+                <input type="number" id="sollBestand" step="0.01" placeholder="0.00" oninput="calculate()"
+                       class="w-full bg-slate-950 border border-slate-700 text-white text-[11px] rounded px-1.5 py-1.5 focus:outline-none focus:border-blue-500 font-mono">
+            </div>
+            <div>
+                <label class="text-[10px] text-slate-400 block font-semibold mb-0.5 truncate">Wechselgeld (€):</label>
+                <input type="number" id="geldbeutelBasis" value="100.00" step="0.01" oninput="calculate()"
+                       class="w-full bg-slate-950 border border-slate-700 text-amber-400 font-bold text-[11px] rounded px-1.5 py-1.5 focus:outline-none focus:border-amber-500 font-mono">
+            </div>
+        </div>
+
+        <!-- Zähl-Eingabebereich Kompakt (2-Spalten Layout: Scheine links, Münzen rechts) -->
+        <div class="bg-slate-900 border border-slate-800 p-2 rounded-xl space-y-2">
+            <h2 class="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Gezählter Bestand</h2>
+            
+            <div class="grid grid-cols-2 gap-1.5">
+                <!-- Scheine Spalte -->
+                <div class="bg-slate-950/60 border border-slate-800/80 p-1.5 rounded-lg space-y-1">
+                    <div class="text-[10px] font-bold text-blue-400 uppercase tracking-wide border-b border-slate-800 pb-0.5">Scheine</div>
+                    <div id="notesGrid" class="space-y-1"></div>
+                </div>
+                <!-- Münzen Spalte -->
+                <div class="bg-slate-950/60 border border-slate-800/80 p-1.5 rounded-lg space-y-1">
+                    <div class="text-[10px] font-bold text-amber-400 uppercase tracking-wide border-b border-slate-800 pb-0.5">Münzen</div>
+                    <div id="coinsGrid" class="space-y-1"></div>
+                </div>
+            </div>
+
+            <!-- Summen- und Vergleichszeile direkt unter dem Zählblock -->
+            <div class="bg-slate-950 border border-slate-800 p-2 rounded-lg flex flex-col sm:flex-row justify-between items-center gap-1 text-[11px] font-mono">
+                <div class="text-slate-400">
+                    Gezählt: <span id="countBlockIst" class="font-bold text-white">0.00 €</span>
+                </div>
+                <div class="text-slate-400">
+                    Soll (FSV + W.-geld): <span id="countBlockSoll" class="font-bold text-blue-400">100.00 €</span>
+                </div>
+                <div class="text-slate-400">
+                    Diff: <span id="countBlockDiff" class="font-bold">0.00 €</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Auswertungs- & Verteilungsabschnitt -->
+        <div class="bg-slate-900 border border-slate-800 p-2 rounded-xl space-y-2">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-1.5">
+                <h2 class="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Verteilung</h2>
+                <div class="text-[10px] font-mono">
+                    Ist: <span id="totalIst" class="font-bold text-white">0.00 €</span> | 
+                    Diff: <span id="totalDiff" class="font-bold">0.00 €</span>
+                </div>
+            </div>
+
+            <!-- Tabelle für Einzahlung / Anpassung -->
+            <div class="overflow-x-auto no-scrollbar">
+                <table class="w-full text-left font-mono text-xs">
+                    <thead>
+                        <tr class="text-slate-500 border-b border-slate-800 text-[10px]">
+                            <th class="pb-1.5">Stück</th>
+                            <th class="pb-1.5 text-center">Gez.</th>
+                            <th class="pb-1.5 text-center">Wechselg.</th>
+                            <th class="pb-1.5 text-center">Einzahlung (Anpassbar)</th>
+                            <th class="pb-1.5 text-right">Summe</th>
+                        </tr>
+                    </thead>
+                    <tbody id="distributionTableBody" class="divide-y divide-slate-800/40">
+                        <!-- Wird per JS befüllt -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Endergebnis Box -->
+            <div class="bg-slate-950 border border-slate-800 p-2.5 rounded-lg flex justify-between items-center gap-1 text-xs">
+                <div class="text-slate-400 truncate">
+                    Einzahlung: <span id="einzahlungSumme" class="text-blue-400 font-bold font-mono text-sm">0.00 €</span>
+                </div>
+                <div class="text-slate-400 truncate">
+                    Neuer Wechselg.: <span id="neuerGeldbeutelSumme" class="text-amber-400 font-bold font-mono text-sm">100.00 €</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Wechselgeld-Optimierung (Toleranz 12-18 Stk., gleichmäßige Restverteilung, Fokus 5€ & 10€) -->
+        <div class="bg-slate-900 border border-slate-800 p-2.5 rounded-xl space-y-2">
+            <h2 id="optHeaderTitle" class="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <span>🪙</span> Wechselgeld-Optimierung (Ziel: 100.00 € | Toleranz 12–18 Stk.)
+            </h2>
+            <div class="overflow-x-auto no-scrollbar">
+                <table class="w-full text-left font-mono text-xs">
+                    <thead>
+                        <tr class="text-slate-500 border-b border-slate-800 text-[10px]">
+                            <th class="pb-1.5">Stückelung</th>
+                            <th class="pb-1.5 text-center">Ist</th>
+                            <th class="pb-1.5 text-center">Ziel</th>
+                            <th class="pb-1.5 text-right">Aktion</th>
+                        </tr>
+                    </thead>
+                    <tbody id="optimizationTableBody" class="divide-y divide-slate-800/40">
+                        <!-- Wird per JS befüllt -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        const denominations = [
+            { value: 50000, label: '500 €', type: 'note' },
+            { value: 20000, label: '200 €', type: 'note' },
+            { value: 10000, label: '100 €', type: 'note' },
+            { value: 5000, label: '50 €', type: 'note' },
+            { value: 2000, label: '20 €', type: 'note' },
+            { value: 1000, label: '10 €', type: 'note' },
+            { value: 500, label: '5 €', type: 'note' },
+            { value: 200, label: '2 €', type: 'coin' },
+            { value: 100, label: '1 €', type: 'coin' },
+            { value: 50, label: '50 ct', type: 'coin' },
+            { value: 20, label: '20 ct', type: 'coin' },
+            { value: 10, label: '10 ct', type: 'coin' },
+            { value: 5, label: '5 ct', type: 'coin' },
+            { value: 2, label: '2 ct', type: 'coin' },
+            { value: 1, label: '1 ct', type: 'coin' }
+        ];
+
+        let countedCounts = {};
+        let manualDepositCounts = {};
+        let manuallyChanged = {};
+
+        document.getElementById('abrechnungsDatum').value = new Date().toISOString().split('T')[0];
+
+        function initUI() {
+            const notesGrid = document.getElementById('notesGrid');
+            const coinsGrid = document.getElementById('coinsGrid');
+            notesGrid.innerHTML = '';
+            coinsGrid.innerHTML = '';
+
+            denominations.forEach((d, index) => {
+                if (countedCounts[d.value] === undefined) countedCounts[d.value] = '';
+
+                const row = document.createElement('div');
+                row.className = "flex items-center justify-between bg-slate-900 border border-slate-800/80 px-1.5 py-0.5 rounded-lg";
+                row.innerHTML = `
+                    <span class="text-[11px] font-bold text-slate-300 w-12 font-mono">${d.label}</span>
+                    <input type="number" min="0" value="${countedCounts[d.value]}" placeholder="0" 
+                           data-index="${index}"
+                           oninput="updateCount(${d.value}, this.value)"
+                           onkeydown="handleKey(event, ${index})"
+                           class="count-input w-16 bg-slate-950 border border-slate-700 text-white font-mono text-xs rounded px-1.5 py-1 focus:outline-none focus:border-blue-500 text-center">
+                `;
+
+                if (d.type === 'note') {
+                    notesGrid.appendChild(row);
+                } else {
+                    coinsGrid.appendChild(row);
+                }
+            });
+
+            calculate();
+        }
+
+        function handleKey(event, currentIndex) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                const inputs = document.querySelectorAll('.count-input');
+                const nextIndex = currentIndex + 1;
+                if (nextIndex < inputs.length) {
+                    inputs[nextIndex].focus();
+                    inputs[nextIndex].select();
+                } else {
+                    inputs[currentIndex].blur();
+                }
+            }
+        }
+
+        function updateCount(val, countStr) {
+            countedCounts[val] = countStr;
+            delete manualDepositCounts[val];
+            delete manuallyChanged[val];
+            calculate();
+        }
+
+        function changeDepositCount(val, delta) {
+            if (manualDepositCounts[val] === undefined) {
+                const autoDist = computeAutomaticDistribution();
+                manualDepositCounts[val] = autoDist[val] || 0;
+            }
+
+            const counted = parseInt(countedCounts[val]) || 0;
+            let current = manualDepositCounts[val] + delta;
+            
+            if (current < 0) current = 0;
+            if (current > counted) current = counted;
+
+            manualDepositCounts[val] = current;
+            manuallyChanged[val] = true;
+
+            calculate();
+        }
+
+        // INTELLIGENTE EINZAHLUNGS-LOGIK (1-5ct zuerst, große Scheine, 5€/10€ schonen, überzählige Münzen)
+        function computeAutomaticDistribution() {
+            const targetGeldbeutelCents = Math.round((parseFloat(document.getElementById('geldbeutelBasis').value) || 0) * 100);
+            
+            let totalIstCents = 0;
+            denominations.forEach(d => {
+                totalIstCents += (parseInt(countedCounts[d.value]) || 0) * d.value;
+            });
+
+            let targetDepositCents = totalIstCents - targetGeldbeutelCents;
+            if (targetDepositCents < 0) targetDepositCents = 0;
+
+            let remainingDeposit = targetDepositCents;
+            let autoDeposit = {};
+            denominations.forEach(d => autoDeposit[d.value] = 0);
+
+            // Respektiere vom User manuell gesetzte Zeilen
+            denominations.forEach(d => {
+                if (manualized(d.value)) {
+                    const take = Math.min(parseInt(countedCounts[d.value]) || 0, manualDepositCounts[d.value] || 0);
+                    autoDeposit[d.value] = take;
+                    remainingDeposit -= take * d.value;
+                }
+            });
+
+            if (remainingDeposit <= 0) return autoDeposit;
+
+            // 1. ZUERST: 1, 2 und 5 Cent Münzen komplett einzahlen
+            [5, 2, 1].forEach(val => {
+                if (!manualized(val)) {
+                    const avail = parseInt(countedCounts[val]) || 0;
+                    if (avail > 0 && remainingDeposit > 0) {
+                        const take = Math.min(avail, Math.floor(remainingDeposit / val));
+                        autoDeposit[val] = take;
+                        remainingDeposit -= take * val;
+                    }
+                }
+            });
+
+            // 2. GROSSE SCHEINE EINZAHLEN (500, 200, 100, 50, 20 €)
+            [50000, 20000, 10000, 5000, 2000].forEach(val => {
+                if (!manualized(val) && remainingDeposit >= val) {
+                    const avail = parseInt(countedCounts[val]) || 0;
+                    if (avail > 0) {
+                        const take = Math.min(avail, Math.floor(remainingDeposit / val));
+                        autoDeposit[val] = take;
+                        remainingDeposit -= take * val;
+                    }
+                }
+            });
+
+            // 3. ÜBERZÄHLIGE MÜNZEN EINZAHLEN (wenn mehr als 15 Stück vorhanden sind)
+            [200, 100, 50, 20, 10].forEach(val => {
+                if (!manualized(val) && remainingDeposit >= val) {
+                    const avail = parseInt(countedCounts[val]) || 0;
+                    if (avail > 15) {
+                        const surplus = avail - 15;
+                        const take = Math.min(surplus, Math.floor(remainingDeposit / val));
+                        autoDeposit[val] = take;
+                        remainingDeposit -= take * val;
+                    }
+                }
+            });
+
+            // 4. KLEINE SCHEINE (10 € und 5 €) & RESTLICHE MÜNZEN
+            [1000, 500, 200, 100, 50, 20, 10].forEach(val => {
+                if (!manualized(val) && remainingDeposit >= val) {
+                    const avail = parseInt(countedCounts[val]) || 0;
+                    const currentAlreadyIn = autoDeposit[val] || 0;
+                    const canTakeMore = avail - currentAlreadyIn;
+                    if (canTakeMore > 0) {
+                        const take = Math.min(canTakeMore, Math.floor(remainingDeposit / val));
+                        autoDeposit[val] += take;
+                        remainingDeposit -= take * val;
+                    }
+                }
+            });
+
+            return autoDeposit;
+        }
+
+        function manualized(val) {
+            return manuallyChanged[val] === true;
+        }
+
+        function calculate() {
+            const fsvCents = Math.round((parseFloat(document.getElementById('sollBestand').value) || 0) * 100);
+            const wechselgeldCents = Math.round((parseFloat(document.getElementById('geldbeutelBasis').value) || 0) * 100);
+            const sollGesamtCents = fsvCents + wechselgeldCents;
+
+            let totalIstCents = 0;
+            denominations.forEach(d => {
+                totalIstCents += (parseInt(countedCounts[d.value]) || 0) * d.value;
+            });
+
+            document.getElementById('countBlockIst').textContent = (totalIstCents / 100).toFixed(2) + ' €';
+            document.getElementById('countBlockSoll').textContent = (sollGesamtCents / 100).toFixed(2) + ' €';
+            
+            const countDiffCents = totalIstCents - sollGesamtCents;
+            const countDiffEl = document.getElementById('countBlockDiff');
+            countDiffEl.textContent = (countDiffCents >= 0 ? '+' : '') + (countDiffCents / 100).toFixed(2) + ' €';
+            countDiffEl.className = "font-bold " + (countDiffCents === 0 ? 'text-green-400' : (countDiffCents > 0 ? 'text-blue-400' : 'text-red-400'));
+
+            let autoDist = computeAutomaticDistribution();
+
+            const tbody = document.getElementById('distributionTableBody');
+            tbody.innerHTML = '';
+
+            let finalEinzahlungCents = 0;
+            let finalGeldbeutelCents = 0;
+            let walletCounts = {};
+
+            denominations.forEach(d => {
+                const counted = parseInt(countedCounts[d.value]) || 0;
+                const depositCount = manualized(d.value) ? (manualDepositCounts[d.value] || 0) : (autoDist[d.value] || 0);
+                const walletCount = counted - depositCount;
+
+                walletCounts[d.value] = walletCount;
+                finalEinzahlungCents += depositCount * d.value;
+                finalGeldbeutelCents += walletCount * d.value;
+
+                const isMan = manualized(d.value);
+                const controlBorderClass = isMan ? 'border-amber-400 bg-amber-950/20' : 'border-slate-800 bg-slate-950';
+                const textNumberColor = isMan ? 'text-amber-300 font-extrabold' : 'text-white font-bold';
+                const greyIndicator = isMan ? 
+                    `<span class="text-[10px] text-transparent font-mono w-6 text-right select-none">(0)</span>` : 
+                    `<span class="text-[10px] text-slate-500 font-mono w-6 text-right">(${depositCount})</span>`;
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-800/40 text-slate-200";
+                tr.innerHTML = `
+                    <td class="py-1 font-bold text-slate-300">${d.label}</td>
+                    <td class="py-1 text-center text-slate-400 font-mono">${counted}</td>
+                    <td class="py-1 text-center text-amber-300 font-mono">${walletCount}</td>
+                    <td class="py-1 text-center">
+                        <div class="inline-flex items-center justify-between ${controlBorderClass} border-2 rounded-lg px-2 py-1 w-36 transition-colors">
+                            <button onclick="changeDepositCount(${d.value}, -1)" class="text-slate-400 hover:text-white px-2 py-0.5 font-bold text-sm bg-slate-900 rounded">-</button>
+                            <span class="w-6 text-center ${textNumberColor} text-sm">${depositCount}</span>
+                            <button onclick="changeDepositCount(${d.value}, 1)" class="text-slate-400 hover:text-white px-2 py-0.5 font-bold text-sm bg-slate-900 rounded">+</button>
+                            <div class="flex items-center justify-end">${greyIndicator}</div>
+                        </div>
+                    </td>
+                    <td class="py-1 text-right font-mono text-slate-300">${(depositCount * d.value / 100).toFixed(2)} €</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('totalIst').textContent = (totalIstCents / 100).toFixed(2) + ' €';
+            
+            const diffCents = totalIstCents - fsvCents;
+            const diffEl = document.getElementById('totalDiff');
+            diffEl.textContent = (diffCents >= 0 ? '+' : '') + (diffCents / 100).toFixed(2) + ' €';
+            diffEl.className = "font-bold " + (diffCents === 0 ? 'text-green-400' : (diffCents > 0 ? 'text-blue-400' : 'text-red-400'));
+
+            document.getElementById('einzahlungSumme').textContent = (finalEinzahlungCents / 100).toFixed(2) + ' €';
+            document.getElementById('neuerGeldbeutelSumme').textContent = (finalGeldbeutelCents / 100).toFixed(2) + ' €';
+
+            // --- WECHSELGELD-OPTIMIERUNG (Toleranz 12-18 Stk.) ---
+            const optTbody = document.getElementById('optimizationTableBody');
+            optTbody.innerHTML = '';
+
+            document.getElementById('optHeaderTitle').innerHTML = `<span>🪙</span> Wechselgeld-Optimierung (Ziel: ${(wechselgeldCents / 100).toFixed(2)} € | Toleranz 12–18 Stk.)`;
+
+            let targetMap = {};
+            const coinVals = [200, 100, 50, 20, 10];
+
+            coinVals.forEach(val => {
+                let cur = walletCounts[val] || 0;
+                if (cur >= 12 && cur <= 18) {
+                    targetMap[val] = cur;
+                } else {
+                    targetMap[val] = 15;
+                }
+            });
+
+            targetMap[5] = 0;
+            targetMap[2] = 0;
+            targetMap[1] = 0;
+
+            let coinsSubTotalCents = 0;
+            coinVals.forEach(val => {
+                coinsSubTotalCents += targetMap[val] * val;
+            });
+
+            let remainingForNotesCents = wechselgeldCents - coinsSubTotalCents;
+
+            let tempNotes = { 50000: 0, 20000: 0, 10000: 0, 5000: 0, 2000: 0, 1000: 0, 500: 0 };
+            
+            let desiredFives = 6;
+            let desiredTens = 4;
+
+            let allocFives = Math.min(desiredFives, Math.floor(remainingForNotesCents / 500));
+            tempNotes[500] = allocFives;
+            remainingForNotesCents -= allocFives * 500;
+
+            let allocTens = Math.min(desiredTens, Math.floor(remainingForNotesCents / 1000));
+            tempNotes[1000] = allocTens;
+            remainingForNotesCents -= allocTens * 1000;
+
+            const noteSteps = [5000, 2000, 1000, 500];
+            noteSteps.forEach(v => {
+                if (remainingForNotesCents > 0) {
+                    let p = Math.floor(remainingForNotesCents / v);
+                    tempNotes[v] = (tempNotes[v] || 0) + p;
+                    remainingForNotesCents -= p * v;
+                }
+            });
+
+            if (remainingForNotesCents > 0) {
+                while (remainingForNotesCents > 0) {
+                    let allocatedInLoop = false;
+                    for (let coinVal of coinVals) {
+                        if (remainingForNotesCents >= coinVal) {
+                            targetMap[coinVal] += 1;
+                            remainingForNotesCents -= coinVal;
+                            allocatedInLoop = true;
+                            if (remainingForNotesCents <= 0) break;
+                        }
+                    }
+                    if (!allocatedInLoop) break;
+                }
+            }
+
+            Object.keys(tempNotes).forEach(v => {
+                targetMap[v] = tempNotes[v];
+            });
+
+            denominations.forEach(d => {
+                const current = walletCounts[d.value] || 0;
+                if (d.value >= 20000) return;
+
+                const target = targetMap[d.value] || 0;
+                const diff = current - target;
+
+                let actionHTML = '';
+                if (diff === 0) {
+                    actionHTML = '<span class="text-green-400 font-bold">✓ Optimal</span>';
+                } else if (diff > 0) {
+                    actionHTML = `<span class="text-blue-400 font-bold">▼ -${diff} Stk</span>`;
+                } else {
+                    actionHTML = `<span class="text-amber-400 font-bold">▲ +${Math.abs(diff)} Stk</span>`;
+                }
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-800/40 text-slate-200";
+                tr.innerHTML = `
+                    <td class="py-1.5 font-bold text-slate-300">${d.label}</td>
+                    <td class="py-1.5 text-center text-amber-300 font-mono">${current}</td>
+                    <td class="py-1.5 text-center text-slate-300 font-mono">${target}</td>
+                    <td class="py-1.5 text-right font-mono">${actionHTML}</td>
+                `;
+                optTbody.appendChild(tr);
+            });
+        }
+
+        function resetForm() {
+            countedCounts = {};
+            manualDepositCounts = {};
+            manuallyChanged = {};
+            document.getElementById('sollBestand').value = '';
+            document.getElementById('geldbeutelBasis').value = '100.00';
+            initUI();
+        }
+
+        initUI();
+    </script>
+</body>
+</html>
